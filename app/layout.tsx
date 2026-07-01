@@ -13,8 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "My School Ops",
-  description: "My School Ops is a platform for managing schools",
+  title: "MySchoolOps — AI-Powered School Management Platform",
+  description:
+    "The complete AI-powered school management platform. Automate administration, academics, communication, finance, and transportation for modern schools.",
+  keywords: ["school management", "education software", "AI", "attendance", "fee management"],
 };
 
 export default function RootLayout({
@@ -25,9 +27,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full scroll-smooth antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full bg-background text-foreground">{children}</body>
     </html>
   );
 }
