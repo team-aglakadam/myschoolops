@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Mail } from "lucide-react";
@@ -22,11 +23,17 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { DUMMY_CREDENTIALS } from "@/lib/constants/auth";
 import { loginSchema, type LoginFormValues } from "@/lib/validations/auth";
+import { useAuth, useRedirectIfAuthenticated } from "@/providers/auth-provider";
 import { cn } from "@/lib/utils";
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const { login } = useAuth();
+  const router = useRouter();
+  const { isLoading: authLoading } = useRedirectIfAuthenticated("/dashboard");
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -41,10 +48,28 @@ export function LoginForm() {
   const { isValid } = form.formState;
 
   async function onSubmit(values: LoginFormValues) {
+    setAuthError(null);
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+
+    const result = await login(values.email, values.password);
     setIsLoading(false);
-    void values;
+
+    if (!result.success) {
+      setAuthError(result.error ?? "Invalid email or password");
+      return;
+    }
+
+    router.push("/dashboard");
+  }
+
+  if (authLoading) {
+    return (
+      <AuthLayout>
+        <div className="flex h-40 items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      </AuthLayout>
+    );
   }
 
   return (
@@ -57,6 +82,12 @@ export function LoginForm() {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5" noValidate>
+            {authError && (
+              <p className="rounded-[var(--radius-md)] bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+                {authError}
+              </p>
+            )}
+
             <FormField
               control={form.control}
               name="email"
@@ -144,6 +175,10 @@ export function LoginForm() {
             </MagneticButton>
           </form>
         </Form>
+
+        <p className="mt-4 rounded-[var(--radius-md)] bg-surface px-3 py-2 text-center text-xs text-muted-foreground">
+          Demo: {DUMMY_CREDENTIALS.email} / {DUMMY_CREDENTIALS.password}
+        </p>
 
         <AuthDivider />
 
