@@ -2,10 +2,11 @@
 
 import { motion } from "framer-motion";
 import { GraduationCap, Menu, Moon, Sun, X } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
-import { MagneticButton } from "@/components/common/magnetic-button";
 import { GradientText } from "@/components/typography/gradient-text";
 import { MaxWidth } from "@/components/layout";
+import { buttonVariants } from "@/components/ui/button";
 import { NAV_LINKS } from "@/lib/constants/navigation";
 import { useScrollPosition } from "@/hooks/use-scroll-position";
 import { useTheme } from "@/providers/theme-provider";
@@ -27,14 +28,14 @@ export function Navbar() {
       )}
     >
       <MaxWidth className="flex items-center justify-between">
-        <a href="#" className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-brand text-primary-foreground shadow-brand">
             <GraduationCap className="h-5 w-5" />
           </div>
           <span className="text-lg font-semibold tracking-tight">
             MySchool<GradientText>Ops</GradientText>
           </span>
-        </a>
+        </Link>
 
         <nav className="hidden items-center gap-8 md:flex" aria-label="Main navigation">
           {NAV_LINKS.map((link) => (
@@ -57,12 +58,12 @@ export function Navbar() {
           >
             {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           </button>
-          <MagneticButton variant="ghost" className="!px-4 !py-2">
+          <Link href="/login" className={buttonVariants({ variant: "ghost", size: "sm", className: "!px-4 !py-2" })}>
             Sign In
-          </MagneticButton>
-          <MagneticButton variant="default" className="!px-5 !py-2.5">
+          </Link>
+          <Link href="/signup" className={buttonVariants({ variant: "default", size: "sm", className: "!px-5 !py-2.5" })}>
             Get Started
-          </MagneticButton>
+          </Link>
         </div>
 
         <button
@@ -92,12 +93,12 @@ export function Navbar() {
             </a>
           ))}
           <div className="mt-4 flex flex-col gap-3">
-            <MagneticButton variant="secondary" className="w-full">
+            <Link href="/login" className={buttonVariants({ variant: "secondary", className: "w-full" })}>
               Sign In
-            </MagneticButton>
-            <MagneticButton variant="default" className="w-full">
+            </Link>
+            <Link href="/signup" className={buttonVariants({ variant: "default", className: "w-full" })}>
               Get Started
-            </MagneticButton>
+            </Link>
           </div>
         </motion.div>
       )}

@@ -1,12 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AnimatedBackground } from "@/components/common/animated-background";
 import { FloatingCard } from "@/components/common/floating-card";
 import { MagneticButton } from "@/components/common/magnetic-button";
 import { AttendanceWidget } from "@/components/widgets/attendance-widget";
 import { HeroLayout, MaxWidth } from "@/components/layout";
+import { buttonVariants } from "@/components/ui/button";
 import { Heading, Subheading } from "@/components/typography";
 import { GradientText } from "@/components/typography/gradient-text";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +65,9 @@ export function Hero() {
             </motion.div>
 
             <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.3 }} className="mt-8 flex flex-wrap gap-4">
-              <MagneticButton variant="default" size="lg">Get Started</MagneticButton>
+              <Link href="/signup" className={buttonVariants({ variant: "default", size: "lg" })}>
+                Get Started
+              </Link>
               <MagneticButton variant="secondary" size="lg">Book Demo</MagneticButton>
             </motion.div>
 
