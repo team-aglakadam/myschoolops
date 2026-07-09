@@ -30,24 +30,38 @@ interface SidebarUserProps {
   onToggleCollapse: () => void;
 }
 
+function getInitials(name: string | null | undefined): string {
+  if (!name) return "U";
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 function SidebarUser({ collapsed, onToggleCollapse }: SidebarUserProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const logout = useLogout();
 
   if (!user) return null;
+
+  const displayName = profile?.full_name ?? user.user_metadata?.full_name ?? user.email ?? "";
+  const displayRole = profile?.role ?? user.user_metadata?.role ?? "";
+  const initials = getInitials(displayName);
 
   return (
     <div className={cn("border-b border-border p-4", collapsed && "px-3")}>
       <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
         <Avatar className="h-10 w-10 shrink-0">
-          <AvatarFallback>{user.initials}</AvatarFallback>
+          <AvatarFallback>{initials}</AvatarFallback>
         </Avatar>
         {!collapsed && (
           <div className="min-w-0 flex-1">
             <p className="truncate text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              {user.role}
+              {displayRole}
             </p>
-            <p className="truncate text-sm font-semibold text-foreground">{user.name}</p>
+            <p className="truncate text-sm font-semibold text-foreground">{displayName}</p>
           </div>
         )}
         {!collapsed && (
