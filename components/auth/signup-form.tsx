@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Mail, User } from "lucide-react";
@@ -32,6 +33,9 @@ import { cn } from "@/lib/utils";
 
 export function SignupForm() {
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [signupSuccess, setSignupSuccess] = useState(false);
+  const router = useRouter();
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -50,10 +54,55 @@ export function SignupForm() {
   const strength = getPasswordStrength(passwordValue);
 
   async function onSubmit(values: SignupFormValues) {
+    setAuthError(null);
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    setIsLoading(false);
-    void values;
+
+    try {
+      const res = await fetch("/api/auth/sign-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: values.email,
+          password: values.password,
+          fullName: values.fullName,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setAuthError(data.error || "Something went wrong");
+        setIsLoading(false);
+        return;
+      }
+
+      setSignupSuccess(true);
+    } catch {
+      setAuthError("Something went wrong");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  if (signupSuccess) {
+    return (
+      <AuthLayout>
+        <AuthCard>
+          <AuthHeader
+            title="Check your email"
+            description="We've sent a confirmation link to your email address. Please click it to activate your account."
+          />
+          <MagneticButton
+            variant="default"
+            size="lg"
+            magnetic={false}
+            className="mt-4 w-full"
+            onClick={() => router.push("/login")}
+          >
+            Go to Sign in
+          </MagneticButton>
+        </AuthCard>
+      </AuthLayout>
+    );
   }
 
   return (
@@ -66,6 +115,12 @@ export function SignupForm() {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5" noValidate>
+            {authError && (
+              <p className="rounded-[var(--radius-md)] bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+                {authError}
+              </p>
+            )}
+
             <FormField
               control={form.control}
               name="fullName"
