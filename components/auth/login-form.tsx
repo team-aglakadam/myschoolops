@@ -23,7 +23,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { DUMMY_CREDENTIALS } from "@/lib/constants/auth";
 import { loginSchema, type LoginFormValues } from "@/lib/validations/auth";
 import { useAuth, useRedirectIfAuthenticated } from "@/providers/auth-provider";
 import { cn } from "@/lib/utils";
@@ -175,10 +174,6 @@ export function LoginForm() {
             </MagneticButton>
           </form>
         </Form>
-
-        <p className="mt-4 rounded-[var(--radius-md)] bg-surface px-3 py-2 text-center text-xs text-muted-foreground">
-          Demo: {DUMMY_CREDENTIALS.email} / {DUMMY_CREDENTIALS.password}
-        </p>
 
         <AuthDivider />
 
