@@ -9,81 +9,149 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import {
-  AUTH_STORAGE_KEY,
-  DUMMY_CREDENTIALS,
-  DUMMY_USER,
-} from "@/lib/constants/auth";
-
-export type AuthUser = {
-  email: string;
-  name: string;
-  role: string;
-  initials: string;
-};
+import { createClient } from "@/lib/supabase/client";
+import type { User, Session } from "@supabase/supabase-js";
+import type { DbUser } from "@/types/database";
 
 interface AuthContextValue {
-  user: AuthUser | null;
+  user: User | null;
+  profile: DbUser | null;
+  session: Session | null;
+  schoolId: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  login: (
+    email: string,
+    password: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function loadStoredUser(): AuthUser | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!stored) return null;
-    return JSON.parse(stored) as AuthUser;
-  } catch {
-    return null;
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<DbUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const supabase = createClient();
+
+  // Fetch user profile from the users table
+  const fetchProfile = useCallback(
+    async (authUser: User) => {
+      const { data } = await supabase
+        .from("users")
+        .select("*")
+        .eq("auth_id", authUser.id)
+        .single();
+
+      if (data) {
+        setProfile(data as DbUser);
+      }
+    },
+    [supabase]
+  );
 
   useEffect(() => {
-    setUser(loadStoredUser());
-    setIsLoading(false);
-  }, []);
+    const initSession = async () => {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
 
-  const login = useCallback(async (email: string, password: string) => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
+        if (error) {
+          console.error("Error fetching session:", error.message);
+          setIsLoading(false);
+          return;
+        }
 
-    const normalizedEmail = email.trim().toLowerCase();
-    if (
-      normalizedEmail !== DUMMY_CREDENTIALS.email ||
-      password !== DUMMY_CREDENTIALS.password
-    ) {
-      return { success: false, error: "Invalid email or password" };
-    }
-
-    const authUser: AuthUser = {
-      email: DUMMY_USER.email,
-      name: DUMMY_USER.name,
-      role: DUMMY_USER.role,
-      initials: DUMMY_USER.initials,
+        if (session) {
+          setSession(session);
+          setUser(session.user);
+          await fetchProfile(session.user);
+        }
+      } catch (error) {
+        console.error("Unexpected error during session fetch:", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
-    setUser(authUser);
-    return { success: true };
-  }, []);
+    initSession();
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session) {
+        setSession(session);
+        setUser(session.user);
+        await fetchProfile(session.user);
+      } else {
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+      }
+      setIsLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase, fetchProfile]);
+
+  const login = useCallback(
+    async (email: string, password: string) => {
+      try {
+        const res = await fetch("/api/auth/sign-in", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          return { success: false, error: data.error || "Invalid credentials" };
+        }
+
+        // Refresh the session on the client after server-side sign-in
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session) {
+          setSession(session);
+          setUser(session.user);
+          await fetchProfile(session.user);
+        }
+
+        return { success: true };
+      } catch {
+        return { success: false, error: "Something went wrong" };
+      }
+    },
+    [supabase, fetchProfile]
+  );
+
+  const logout = useCallback(async () => {
+    await fetch("/api/auth/sign-out", { method: "POST" });
+    await supabase.auth.signOut();
     setUser(null);
-  }, []);
+    setProfile(null);
+    setSession(null);
+    router.push("/login");
+  }, [supabase, router]);
+
+  const schoolId = profile?.school_id ?? user?.user_metadata?.school_id ?? null;
 
   return (
     <AuthContext.Provider
       value={{
         user,
+        profile,
+        session,
+        schoolId,
         isAuthenticated: !!user,
         isLoading,
         login,
