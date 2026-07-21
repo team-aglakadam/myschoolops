@@ -6,7 +6,7 @@ export async function createClient() {
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {
         getAll() {
@@ -28,13 +28,15 @@ export async function createClient() {
   );
 }
 
-// Service role client for admin operations (creating auth users, deleting users, etc.)
+// Secret key client for admin operations (creating auth users, deleting users, etc.)
+// Must use the project's secret key — the publishable/anon key cannot perform
+// privileged operations like auth.admin.createUser and will fail with a 400/401.
 export async function createServiceClient() {
   const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.SUPABASE_SECRET_KEY!,
     {
       cookies: {
         getAll() {
