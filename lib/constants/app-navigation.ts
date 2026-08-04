@@ -1,9 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
-  GraduationCap,
   LayoutGrid,
   UserPlus,
+  School,
+  Megaphone
 } from "lucide-react";
 
 export interface AppNavItem {
@@ -22,22 +23,28 @@ export const APP_NAVIGATION: AppNavItem[] = [
     description: "Overview of your school operations and key metrics.",
   },
   {
-    title: "Onboarding",
+    title: "Classes",
+    icon: School,
+    href: "/class",
+    description: "Manage your classes and sections.",
+  },
+  {
+    title: "Students",
     icon: UserPlus,
-    children: [
-      {
-        title: "Student Onboarding",
-        href: "/onboarding/student",
-        icon: GraduationCap,
-        description: "Student onboarding workflow will be implemented here.",
-      },
-      {
-        title: "Teacher Onboarding",
-        href: "/onboarding/teacher",
-        icon: BookOpen,
-        description: "Teacher onboarding workflow will be implemented here.",
-      },
-    ],
+    href: "/student",
+    description: "Manage your students.",
+  },
+  {
+    title: "Attendance",
+    icon: BookOpen,
+    href: "/attendance",
+    description: "Manage attendance records.",
+  },
+  {
+    title: "Notifications",
+    icon: Megaphone,
+    href: "/notifications",
+    description: "Manage notifications.",
   },
 ];
 

@@ -10,6 +10,8 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { isAuthSkipped } from "@/lib/auth/skip-auth";
+import { DEV_PROFILE, DEV_USER } from "@/lib/auth/dev-user";
 import type { User, Session } from "@supabase/supabase-js";
 import type { DbUser } from "@/types/database";
 
@@ -29,17 +31,22 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<DbUser | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
-  const supabase = createClient();
+const SKIP_AUTH = isAuthSkipped();
 
-  // Fetch user profile from the users table
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(SKIP_AUTH ? DEV_USER : null);
+  const [profile, setProfile] = useState<DbUser | null>(
+    SKIP_AUTH ? DEV_PROFILE : null
+  );
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(!SKIP_AUTH);
+  const router = useRouter();
+  const [supabase] = useState(() => (SKIP_AUTH ? null : createClient()));
+
   const fetchProfile = useCallback(
     async (authUser: User) => {
+      if (!supabase) return;
+
       const { data } = await supabase
         .from("users")
         .select("*")
@@ -54,40 +61,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const initSession = async () => {
-      try {
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
+    if (SKIP_AUTH || !supabase) {
+      setIsLoading(false);
+      return;
+    }
 
-        if (error) {
-          console.error("Error fetching session:", error.message);
-          setIsLoading(false);
-          return;
-        }
+    let cancelled = false;
 
-        if (session) {
-          setSession(session);
-          setUser(session.user);
-          await fetchProfile(session.user);
-        }
-      } catch (error) {
-        console.error("Unexpected error during session fetch:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    initSession();
+    const loadingTimeout = window.setTimeout(() => {
+      if (!cancelled) setIsLoading(false);
+    }, 5000);
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        setSession(session);
-        setUser(session.user);
-        await fetchProfile(session.user);
+    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+      if (cancelled) return;
+
+      if (event === "TOKEN_REFRESHED" && !nextSession) {
+        await supabase.auth.signOut({ scope: "local" });
+      }
+
+      if (nextSession) {
+        setSession(nextSession);
+        setUser(nextSession.user);
+        await fetchProfile(nextSession.user);
       } else {
         setSession(null);
         setUser(null);
@@ -97,12 +94,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => {
+      cancelled = true;
+      window.clearTimeout(loadingTimeout);
       subscription.unsubscribe();
     };
-  }, [supabase, fetchProfile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init once on mount
+  }, []);
 
   const login = useCallback(
     async (email: string, password: string) => {
+      if (SKIP_AUTH) {
+        setUser(DEV_USER);
+        setProfile(DEV_PROFILE);
+        return { success: true };
+      }
+
+      if (!supabase) {
+        return { success: false, error: "Auth is not configured" };
+      }
+
       try {
         const res = await fetch("/api/auth/sign-in", {
           method: "POST",
@@ -115,7 +125,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { success: false, error: data.error || "Invalid credentials" };
         }
 
-        // Refresh the session on the client after server-side sign-in
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -135,15 +144,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    if (SKIP_AUTH) {
+      setUser(null);
+      setProfile(null);
+      setSession(null);
+      router.push("/login");
+      return;
+    }
+
     await fetch("/api/auth/sign-out", { method: "POST" });
-    await supabase.auth.signOut();
+    await supabase?.auth.signOut();
     setUser(null);
     setProfile(null);
     setSession(null);
     router.push("/login");
   }, [supabase, router]);
 
-  const schoolId = profile?.school_id ?? user?.user_metadata?.school_id ?? null;
+  const schoolId =
+    profile?.school_id ?? user?.user_metadata?.school_id ?? null;
 
   return (
     <AuthContext.Provider
@@ -152,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         session,
         schoolId,
-        isAuthenticated: !!user,
+        isAuthenticated: SKIP_AUTH ? true : !!user,
         isLoading,
         login,
         logout,
@@ -176,6 +194,7 @@ export function useRequireAuth(redirectTo = "/login") {
   const router = useRouter();
 
   useEffect(() => {
+    if (SKIP_AUTH) return;
     if (!isLoading && !isAuthenticated) {
       router.replace(redirectTo);
     }
@@ -189,6 +208,7 @@ export function useRedirectIfAuthenticated(redirectTo = "/dashboard") {
   const router = useRouter();
 
   useEffect(() => {
+    if (SKIP_AUTH) return;
     if (!isLoading && isAuthenticated) {
       router.replace(redirectTo);
     }

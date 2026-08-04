@@ -81,7 +81,7 @@ export function AttendancePreview() {
                 </div>
                 <BarChart data={WEEK_DATA} height="h-20" barClassName="bg-chart-bar" />
                 <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-                  {["M", "T", "W", "T", "F", "S", "S"].map((d) => <span key={d}>{d}</span>)}
+                  {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => <span key={i}>{d}</span>)}
                 </div>
               </GlassCard>
 

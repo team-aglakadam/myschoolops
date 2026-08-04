@@ -64,8 +64,10 @@ export function Navbar() {
           <Link href="/signup" className={buttonVariants({ variant: "default", size: "sm", className: "!px-5 !py-2.5" })}>
             Get Started
           </Link>
+          <Link href="/class" className={buttonVariants({ variant: "ghost", size: "sm", className: "!px-4 !py-2" })}>
+            Classes
+          </Link>
         </div>
-
         <button
           type="button"
           className="flex h-10 w-10 items-center justify-center rounded-xl glass md:hidden"

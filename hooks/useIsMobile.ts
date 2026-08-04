@@ -1,0 +1,19 @@
+import { MOBILE_WIDTH } from '@/utils/constants'
+import { useState, useEffect } from 'react'
+
+export const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth < MOBILE_WIDTH)
+    }
+
+    checkIfMobile()
+    window.addEventListener('resize', checkIfMobile)
+
+    return () => window.removeEventListener('resize', checkIfMobile)
+  }, [])
+
+  return isMobile
+}
