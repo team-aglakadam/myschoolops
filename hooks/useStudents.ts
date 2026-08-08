@@ -5,7 +5,6 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   createStudent,
   deleteStudent,
-  getAllStudents,
   listStudents,
   updateStudent,
 } from "@/lib/students/student-service";
@@ -44,7 +43,6 @@ export function useStudents() {
   const debouncedSearch = useDebouncedValue(search, 300);
   const requestId = useRef(0);
 
-  // Keep latest query values for mutations without stale closures
   const queryRef = useRef({
     search: debouncedSearch,
     filters,
@@ -87,12 +85,17 @@ export function useStudents() {
           });
         }
 
-        const all = await getAllStudents();
         if (id !== requestId.current) return;
 
-        setResult(data);
+        setResult({
+          items: data.items,
+          total: data.total,
+          page: data.page,
+          pageSize: data.pageSize,
+          totalPages: data.totalPages,
+        });
         setPage(data.page);
-        setCatalogCount(all.length);
+        setCatalogCount(data.catalogCount);
       } catch {
         if (id !== requestId.current) return;
         showFeedback("error", "Could not load students. Please try again.");
@@ -136,9 +139,9 @@ export function useStudents() {
           page: 1,
         });
         showFeedback("success", "Student created successfully.");
-      } catch {
-        showFeedback("error", "Failed to create student.");
-        throw new Error("create_failed");
+      } catch (error) {
+        // Let the form modal display the error — don't show on page banner
+        throw error;
       } finally {
         setIsMutating(false);
       }
@@ -154,9 +157,9 @@ export function useStudents() {
         await updateStudent(id, values);
         await load(queryRef.current);
         showFeedback("success", "Student updated successfully.");
-      } catch {
-        showFeedback("error", "Failed to update student.");
-        throw new Error("update_failed");
+      } catch (error) {
+        // Let the form modal display the error — don't show on page banner
+        throw error;
       } finally {
         setIsMutating(false);
       }
@@ -172,9 +175,11 @@ export function useStudents() {
         await deleteStudent(student.id);
         await load(queryRef.current);
         showFeedback("success", `${student.fullName} was removed.`);
-      } catch {
-        showFeedback("error", "Failed to delete student.");
-        throw new Error("delete_failed");
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to delete student.";
+        showFeedback("error", message);
+        throw error;
       } finally {
         setIsMutating(false);
       }
