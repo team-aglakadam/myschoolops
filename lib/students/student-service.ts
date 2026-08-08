@@ -4,42 +4,78 @@ import type {
   IStudentListQuery,
   IStudentListResult,
 } from "@/types/IStudentTypes";
-import { MOCK_STUDENTS } from "@/lib/students/mock-data";
 
-/**
- * In-memory student store.
- * Swap these function bodies for fetch("/api/students") later —
- * call sites already treat them as async.
- */
-let students: IStudent[] = [...MOCK_STUDENTS];
+// ── API helper ──────────────────────────────────────────────────────────
+async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
 
-function delay(ms = 120) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  const json = await res.json();
+
+  if (!res.ok) {
+    throw new Error(json.error || `Request failed (${res.status})`);
+  }
+
+  return json;
 }
 
-function matchesSearch(student: IStudent, search: string) {
-  if (!search.trim()) return true;
-  const q = search.trim().toLowerCase();
-  return [
-    student.fullName,
-    student.admissionNo,
-    student.rollNumber,
-    student.className,
-    student.section,
-    student.guardianName,
-    student.mobileNumber,
-  ]
-    .join(" ")
-    .toLowerCase()
-    .includes(q);
+// ── Public API ──────────────────────────────────────────────────────────
+
+export async function listStudents(
+  query: IStudentListQuery
+): Promise<IStudentListResult & { catalogCount: number }> {
+  const params = new URLSearchParams();
+  if (query.search) params.set("search", query.search);
+  if (query.filters.className) params.set("className", query.filters.className);
+  if (query.filters.section) params.set("section", query.filters.section);
+  if (query.filters.status) params.set("status", query.filters.status);
+  params.set("page", String(query.page));
+  params.set("pageSize", String(query.pageSize));
+
+  const result = await apiFetch<{
+    data: IStudent[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+    catalogCount: number;
+  }>(`/api/students?${params}`);
+
+  return {
+    items: result.data,
+    total: result.total,
+    page: result.page,
+    pageSize: result.pageSize,
+    totalPages: result.totalPages,
+    catalogCount: result.catalogCount,
+  };
 }
 
-function matchesFilters(student: IStudent, query: IStudentListQuery) {
-  const { filters } = query;
-  if (filters.className && student.className !== filters.className) return false;
-  if (filters.section && student.section !== filters.section) return false;
-  if (filters.status && student.status !== filters.status) return false;
-  return true;
+export async function createStudent(
+  values: IStudentFormValues
+): Promise<void> {
+  await apiFetch("/api/students", {
+    method: "POST",
+    body: JSON.stringify(values),
+  });
+}
+
+export async function updateStudent(
+  id: string,
+  values: IStudentFormValues
+): Promise<void> {
+  await apiFetch("/api/students", {
+    method: "PUT",
+    body: JSON.stringify({ id, ...values }),
+  });
+}
+
+export async function deleteStudent(id: string): Promise<void> {
+  await apiFetch(`/api/students?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 export function studentToFormValues(student: IStudent): IStudentFormValues {
@@ -49,119 +85,11 @@ export function studentToFormValues(student: IStudent): IStudentFormValues {
     rollNumber: student.rollNumber,
     className: student.className,
     section: student.section,
+    classId: student.classId ?? "",
     dateOfBirth: student.dateOfBirth,
     gender: student.gender,
     bloodGroup: student.bloodGroup,
     guardianName: student.guardianName,
     mobileNumber: student.mobileNumber,
   };
-}
-
-export async function listStudents(
-  query: IStudentListQuery
-): Promise<IStudentListResult> {
-  await delay();
-
-  const filtered = students
-    .filter((s) => matchesSearch(s, query.search) && matchesFilters(s, query))
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-
-  const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / query.pageSize) || 1);
-  const page = Math.min(Math.max(1, query.page), totalPages || 1);
-  const start = (page - 1) * query.pageSize;
-
-  return {
-    items: filtered.slice(start, start + query.pageSize),
-    total,
-    page,
-    pageSize: query.pageSize,
-    totalPages,
-  };
-}
-
-export async function getAllStudents(): Promise<IStudent[]> {
-  await delay();
-  return [...students];
-}
-
-export async function getStudent(id: string): Promise<IStudent | null> {
-  await delay();
-  return students.find((s) => s.id === id) ?? null;
-}
-
-export async function createStudent(
-  values: IStudentFormValues
-): Promise<IStudent> {
-  await delay();
-
-  const admissionNo =
-    values.admissionNo.trim() ||
-    `ADM-${new Date().getFullYear()}-${String(students.length + 1).padStart(3, "0")}`;
-
-  const student: IStudent = {
-    id: crypto.randomUUID(),
-    fullName: values.fullName.trim(),
-    admissionNo,
-    rollNumber: values.rollNumber.trim(),
-    className: values.className,
-    section: values.section,
-    dateOfBirth: values.dateOfBirth,
-    gender: values.gender,
-    bloodGroup: values.bloodGroup,
-    guardianName: values.guardianName.trim(),
-    mobileNumber: values.mobileNumber.trim(),
-    status: "active",
-    createdAt: new Date().toISOString(),
-  };
-
-  students = [student, ...students];
-  return student;
-}
-
-export async function updateStudent(
-  id: string,
-  values: IStudentFormValues
-): Promise<IStudent> {
-  await delay();
-
-  const existing = students.find((s) => s.id === id);
-  if (!existing) {
-    throw new Error("Student not found");
-  }
-
-  const updated: IStudent = {
-    ...existing,
-    fullName: values.fullName.trim(),
-    admissionNo: values.admissionNo.trim() || existing.admissionNo,
-    rollNumber: values.rollNumber.trim(),
-    className: values.className,
-    section: values.section,
-    dateOfBirth: values.dateOfBirth,
-    gender: values.gender,
-    bloodGroup: values.bloodGroup,
-    guardianName: values.guardianName.trim(),
-    mobileNumber: values.mobileNumber.trim(),
-  };
-
-  students = students.map((s) => (s.id === id ? updated : s));
-  return updated;
-}
-
-export async function deleteStudent(id: string): Promise<void> {
-  await delay();
-  const exists = students.some((s) => s.id === id);
-  if (!exists) {
-    throw new Error("Student not found");
-  }
-  students = students.filter((s) => s.id !== id);
-}
-
-/** Dev helper — clear or reseed store */
-export async function resetStudents(seed = false): Promise<void> {
-  await delay(0);
-  students = seed ? [...MOCK_STUDENTS] : [];
 }
