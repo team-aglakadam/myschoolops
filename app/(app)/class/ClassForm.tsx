@@ -58,7 +58,8 @@ export const ClassForm: React.FC<IClassFormProps> = ({
     setSections(classToFormSections(initialClass));
     setFormError(null);
     setIsSaving(false);
-  }, [open, initialClass, mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when dialog opens, not on parent re-renders
+  }, [open]);
 
   const addSection = () => {
     setSections((prev) => [...prev, createEmptySection()]);
@@ -88,7 +89,8 @@ export const ClassForm: React.FC<IClassFormProps> = ({
       name: className.trim(),
       sections: sections
         .filter((section) => section.name.trim())
-        .map(({ name, teacher }) => ({
+        .map(({ id, name, teacher }) => ({
+          id,
           name: name.trim(),
           teacher: teacher.trim(),
         })),
