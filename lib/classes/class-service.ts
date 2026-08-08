@@ -5,160 +5,148 @@ import type {
   IClassListResult,
   IClassSection,
 } from "@/types/IClassTypes";
-import { MOCK_CLASSES } from "@/lib/classes/mock-data";
 
-/**
- * In-memory class store.
- * Swap these function bodies for fetch("/api/classes") later.
- */
-let classes: IClass[] = structuredClone(MOCK_CLASSES);
-
-function delay(ms = 120) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// ── Types for raw DB rows returned by the API ───────────────────────────
+interface DbClassRow {
+  id: string;
+  name: string;
+  section: string | null;
+  class_teacher_id: string | null;
+  created_at: string | null;
+  students: Array<{ count: number }>;
 }
 
-function toSections(
-  values: IClassFormValues["sections"]
-): IClassSection[] {
-  return values
-    .filter((s) => s.name.trim())
-    .map((s) => ({
-      id: crypto.randomUUID(),
-      name: s.name.trim(),
-      teacher: s.teacher.trim(),
-      studentCount: 0,
-      status: "active" as const,
-    }));
+// ── Transform flat DB rows into grouped IClass objects ──────────────────
+function groupRows(rows: DbClassRow[]): IClass[] {
+  const map = new Map<string, IClass>();
+
+  for (const row of rows) {
+    const key = row.name;
+
+    if (!map.has(key)) {
+      map.set(key, {
+        id: key,
+        name: row.name,
+        sections: [],
+        createdAt: row.created_at ?? new Date().toISOString(),
+      });
+    }
+
+    const cls = map.get(key)!;
+
+    if (row.section) {
+      const section: IClassSection = {
+        id: row.id,
+        name: row.section,
+        teacher: "",
+        studentCount: row.students?.[0]?.count ?? 0,
+        status: "active",
+      };
+      cls.sections.push(section);
+    }
+
+    // Use the earliest created_at
+    if (row.created_at && row.created_at < cls.createdAt) {
+      cls.createdAt = row.created_at;
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { numeric: true })
+  );
+}
+
+// ── API helper ──────────────────────────────────────────────────────────
+async function apiFetch<T>(
+  url: string,
+  options?: RequestInit
+): Promise<T> {
+  const res = await fetch(url, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+
+  const json = await res.json();
+
+  if (!res.ok) {
+    throw new Error(json.error || `Request failed (${res.status})`);
+  }
+
+  return json;
+}
+
+// ── Public API ──────────────────────────────────────────────────────────
+
+export async function fetchAllClasses(): Promise<IClass[]> {
+  const { data } = await apiFetch<{ data: DbClassRow[] }>("/api/classes");
+  return groupRows(data);
 }
 
 export async function listClasses(
   query: IClassListQuery
 ): Promise<IClassListResult> {
-  await delay();
-
+  const all = await fetchAllClasses();
   const q = query.search.trim().toLowerCase();
-  const filtered = classes
-    .filter((item) => {
-      if (!q) return true;
-      if (item.name.toLowerCase().includes(q)) return true;
-      return item.sections.some(
-        (section) =>
-          section.name.toLowerCase().includes(q) ||
-          section.teacher.toLowerCase().includes(q)
-      );
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+  const filtered = q
+    ? all.filter((item) => {
+        if (item.name.toLowerCase().includes(q)) return true;
+        return item.sections.some(
+          (s) =>
+            s.name.toLowerCase().includes(q) ||
+            s.teacher.toLowerCase().includes(q)
+        );
+      })
+    : all;
 
   const totalSections = filtered.reduce(
     (sum, item) => sum + item.sections.length,
     0
   );
 
-  return {
-    items: filtered,
-    total: filtered.length,
-    totalSections,
-  };
+  return { items: filtered, total: filtered.length, totalSections };
 }
 
 export async function getAllClasses(): Promise<IClass[]> {
-  await delay();
-  return structuredClone(classes);
+  return fetchAllClasses();
 }
 
-export async function getClass(id: string): Promise<IClass | null> {
-  await delay();
-  const found = classes.find((c) => c.id === id);
-  return found ? structuredClone(found) : null;
-}
-
-export async function createClass(values: IClassFormValues): Promise<IClass> {
-  await delay();
-
+export async function createClass(values: IClassFormValues): Promise<void> {
   const name = values.name.trim();
   if (!name) throw new Error("Class name is required");
 
-  const sections = toSections(values.sections);
-  if (sections.length === 0) {
-    throw new Error("Add at least one section");
-  }
+  const sections = values.sections.filter((s) => s.name.trim());
+  if (sections.length === 0) throw new Error("Add at least one section");
 
-  const duplicate = classes.some(
-    (c) => c.name.toLowerCase() === name.toLowerCase()
-  );
-  if (duplicate) {
-    throw new Error("A class with this name already exists");
-  }
-
-  const created: IClass = {
-    id: crypto.randomUUID(),
-    name,
-    sections,
-    createdAt: new Date().toISOString(),
-  };
-
-  classes = [created, ...classes];
-  return structuredClone(created);
+  await apiFetch("/api/classes", {
+    method: "POST",
+    body: JSON.stringify({ name, sections }),
+  });
 }
 
 export async function updateClass(
-  id: string,
+  id: string, // current class name (used as identifier)
   values: IClassFormValues
-): Promise<IClass> {
-  await delay();
-
-  const existing = classes.find((c) => c.id === id);
-  if (!existing) throw new Error("Class not found");
-
+): Promise<void> {
   const name = values.name.trim();
   if (!name) throw new Error("Class name is required");
 
-  const sections = toSections(values.sections);
-  if (sections.length === 0) {
-    throw new Error("Add at least one section");
-  }
+  const sections = values.sections.filter((s) => s.name.trim());
+  if (sections.length === 0) throw new Error("Add at least one section");
 
-  const duplicate = classes.some(
-    (c) => c.id !== id && c.name.toLowerCase() === name.toLowerCase()
-  );
-  if (duplicate) {
-    throw new Error("A class with this name already exists");
-  }
-
-  // Preserve student counts when section names match
-  const mergedSections = sections.map((section) => {
-    const prev = existing.sections.find(
-      (s) => s.name.toLowerCase() === section.name.toLowerCase()
-    );
-    return prev
-      ? {
-          ...section,
-          id: prev.id,
-          studentCount: prev.studentCount,
-          status: prev.status,
-        }
-      : section;
+  await apiFetch("/api/classes", {
+    method: "PUT",
+    body: JSON.stringify({
+      className: id,
+      name,
+      sections,
+    }),
   });
-
-  const updated: IClass = {
-    ...existing,
-    name,
-    sections: mergedSections,
-  };
-
-  classes = classes.map((c) => (c.id === id ? updated : c));
-  return structuredClone(updated);
 }
 
 export async function deleteClass(id: string): Promise<void> {
-  await delay();
-  if (!classes.some((c) => c.id === id)) {
-    throw new Error("Class not found");
-  }
-  classes = classes.filter((c) => c.id !== id);
-}
-
-export async function resetClasses(seed = false): Promise<void> {
-  await delay(0);
-  classes = seed ? structuredClone(MOCK_CLASSES) : [];
+  await apiFetch("/api/classes", {
+    method: "DELETE",
+    body: JSON.stringify({ name: id }),
+  });
 }
