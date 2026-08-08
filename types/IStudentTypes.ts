@@ -4,6 +4,7 @@ export interface IStudentFormValues {
   rollNumber: string;
   className: string;
   section: string;
+  classId: string;
   dateOfBirth: string;
   gender: string;
   bloodGroup: string;
@@ -23,7 +24,7 @@ export interface IStudentFormProps {
   onSave?: (values: IStudentFormValues) => void | Promise<void>;
 }
 
-/** List row model — shaped for easy mapping from API / DbStudent + user join later */
+/** List row model — shaped for easy mapping from API / DbStudent + user join */
 export interface IStudent {
   id: string;
   fullName: string;
@@ -31,6 +32,7 @@ export interface IStudent {
   rollNumber: string;
   className: string;
   section: string;
+  classId: string;
   dateOfBirth: string;
   gender: string;
   bloodGroup: string;
@@ -76,6 +78,7 @@ export const EMPTY_STUDENT_FORM: IStudentFormValues = {
   rollNumber: "",
   className: "",
   section: "",
+  classId: "",
   dateOfBirth: "",
   gender: "",
   bloodGroup: "",
@@ -85,26 +88,6 @@ export const EMPTY_STUDENT_FORM: IStudentFormValues = {
 
 export const STUDENT_PAGE_SIZE = 8;
 
-/** Placeholder options until classes API is wired */
-export const STUDENT_CLASS_OPTIONS = [
-  "Nursery",
-  "LKG",
-  "UKG",
-  "Grade 1",
-  "Grade 2",
-  "Grade 3",
-  "Grade 4",
-  "Grade 5",
-  "Grade 6",
-  "Grade 7",
-  "Grade 8",
-  "Grade 9",
-  "Grade 10",
-  "Grade 11",
-  "Grade 12",
-] as const;
-
-export const STUDENT_SECTION_OPTIONS = ["A", "B", "C", "D", "E"] as const;
 
 export const STUDENT_GENDER_OPTIONS = [
   { value: "male", label: "Male" },
