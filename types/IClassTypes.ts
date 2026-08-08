@@ -21,7 +21,7 @@ export interface IClass {
 
 export interface IClassFormValues {
   name: string;
-  sections: Array<{ name: string; teacher: string }>;
+  sections: Array<{ id?: string; name: string; teacher: string }>;
 }
 
 export type ClassFormMode = "create" | "edit";
