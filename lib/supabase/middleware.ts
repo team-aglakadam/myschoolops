@@ -2,6 +2,15 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthSkipped } from "@/lib/auth/skip-auth";
 
+const PUBLIC_PATHS = ["/", "/login", "/signup"];
+
+function isPublicPath(pathname: string): boolean {
+  return (
+    PUBLIC_PATHS.includes(pathname) ||
+    pathname.startsWith("/api/auth")
+  );
+}
+
 export async function updateSession(request: NextRequest) {
   if (isAuthSkipped()) {
     return NextResponse.next({ request });
@@ -34,10 +43,15 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  // IMPORTANT: Avoid writing any logic between createServerClient and
+  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
+  // issues with users being randomly logged out.
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Authenticated user on login/signup → redirect to dashboard
   if (
     user &&
     (request.nextUrl.pathname === "/login" ||
@@ -45,6 +59,13 @@ export async function updateSession(request: NextRequest) {
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
+    return NextResponse.redirect(url);
+  }
+
+  // Unauthenticated user on a protected route → redirect to login
+  if (!user && !isPublicPath(request.nextUrl.pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
