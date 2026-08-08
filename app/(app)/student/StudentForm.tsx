@@ -18,12 +18,70 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   EMPTY_STUDENT_FORM,
   STUDENT_BLOOD_GROUP_OPTIONS,
-  STUDENT_CLASS_OPTIONS,
   STUDENT_GENDER_OPTIONS,
-  STUDENT_SECTION_OPTIONS,
   type IStudentFormProps,
   type IStudentFormValues,
 } from "@/types/IStudentTypes";
+
+interface ClassGroup {
+  name: string;
+  sections: Array<{ id: string; section: string }>;
+}
+
+function useClassOptions() {
+  const [classes, setClasses] = React.useState<ClassGroup[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const res = await fetch("/api/classes");
+        if (!res.ok) throw new Error("Failed to fetch classes");
+        const json = await res.json();
+        const rows = json.data as Array<{
+          id: string;
+          name: string;
+          section: string | null;
+        }>;
+
+        // Group by class name
+        const map = new Map<string, ClassGroup>();
+        for (const row of rows) {
+          if (!map.has(row.name)) {
+            map.set(row.name, { name: row.name, sections: [] });
+          }
+          if (row.section) {
+            map.get(row.name)!.sections.push({
+              id: row.id,
+              section: row.section,
+            });
+          }
+        }
+
+        if (!cancelled) {
+          setClasses(
+            Array.from(map.values()).sort((a, b) =>
+              a.name.localeCompare(b.name, undefined, { numeric: true })
+            )
+          );
+        }
+      } catch (err) {
+        console.error("Error loading classes:", err);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { classes, isLoading };
+}
 
 export const StudentForm: React.FC<IStudentFormProps> = ({
   open,
@@ -32,18 +90,21 @@ export const StudentForm: React.FC<IStudentFormProps> = ({
   mode = "create",
   initialValues = null,
 }) => {
-  const [form, setForm] = React.useState<IStudentFormValues>(EMPTY_STUDENT_FORM);
+  const [form, setForm] =
+    React.useState<IStudentFormValues>(EMPTY_STUDENT_FORM);
   const [isSaving, setIsSaving] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
   const isMobile = useIsMobile();
   const isEdit = mode === "edit";
+  const { classes, isLoading: classesLoading } = useClassOptions();
 
   React.useEffect(() => {
     if (!open) return;
     setForm(initialValues ?? EMPTY_STUDENT_FORM);
     setFormError(null);
     setIsSaving(false);
-  }, [open, initialValues, mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when dialog opens, not on parent re-renders
+  }, [open]);
 
   const updateField = <K extends keyof IStudentFormValues>(
     field: K,
@@ -52,11 +113,36 @@ export const StudentForm: React.FC<IStudentFormProps> = ({
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  // When class changes, reset section and classId
+  const handleClassChange = (className: string) => {
+    setForm((prev) => ({
+      ...prev,
+      className,
+      section: "",
+      classId: "",
+    }));
+  };
+
+  // When section changes, set the classId (the DB row UUID)
+  const handleSectionChange = (section: string) => {
+    const classGroup = classes.find((c) => c.name === form.className);
+    const match = classGroup?.sections.find((s) => s.section === section);
+    setForm((prev) => ({
+      ...prev,
+      section,
+      classId: match?.id ?? "",
+    }));
+  };
+
+  const selectedClassGroup = classes.find((c) => c.name === form.className);
+  const sectionOptions = selectedClassGroup?.sections ?? [];
+
   const isValid =
     form.fullName.trim() &&
     form.rollNumber.trim() &&
     form.className &&
     form.section &&
+    form.classId &&
     form.dateOfBirth &&
     form.gender &&
     form.guardianName.trim() &&
@@ -70,11 +156,13 @@ export const StudentForm: React.FC<IStudentFormProps> = ({
     try {
       await onSave?.(form);
       onOpenChange?.(false);
-    } catch {
+    } catch (error) {
       setFormError(
-        isEdit
-          ? "Could not update student. Please try again."
-          : "Could not create student. Please try again."
+        error instanceof Error
+          ? error.message
+          : isEdit
+            ? "Could not update student. Please try again."
+            : "Could not create student. Please try again."
       );
     } finally {
       setIsSaving(false);
@@ -182,14 +270,19 @@ export const StudentForm: React.FC<IStudentFormProps> = ({
                   id="className"
                   required
                   value={form.className}
-                  onChange={(e) => updateField("className", e.target.value)}
+                  onChange={(e) => handleClassChange(e.target.value)}
+                  disabled={classesLoading}
                 >
                   <option value="" disabled>
-                    Select class
+                    {classesLoading
+                      ? "Loading classes…"
+                      : classes.length === 0
+                        ? "No classes available"
+                        : "Select class"}
                   </option>
-                  {STUDENT_CLASS_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  {classes.map((cls) => (
+                    <option key={cls.name} value={cls.name}>
+                      {cls.name}
                     </option>
                   ))}
                 </Select>
@@ -202,14 +295,19 @@ export const StudentForm: React.FC<IStudentFormProps> = ({
                   id="section"
                   required
                   value={form.section}
-                  onChange={(e) => updateField("section", e.target.value)}
+                  onChange={(e) => handleSectionChange(e.target.value)}
+                  disabled={!form.className || sectionOptions.length === 0}
                 >
                   <option value="" disabled>
-                    Select section
+                    {!form.className
+                      ? "Select class first"
+                      : sectionOptions.length === 0
+                        ? "No sections"
+                        : "Select section"}
                   </option>
-                  {STUDENT_SECTION_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  {sectionOptions.map((s) => (
+                    <option key={s.id} value={s.section}>
+                      {s.section}
                     </option>
                   ))}
                 </Select>
