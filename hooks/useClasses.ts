@@ -5,8 +5,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   createClass,
   deleteClass,
-  getAllClasses,
-  listClasses,
+  fetchAllClasses,
   updateClass,
 } from "@/lib/classes/class-service";
 import type {
@@ -53,13 +52,29 @@ export function useClasses() {
       const id = ++requestId.current;
       setIsLoading(true);
       try {
-        const [data, all] = await Promise.all([
-          listClasses({ search: searchValue }),
-          getAllClasses(),
-        ]);
+        const all = await fetchAllClasses();
         if (id !== requestId.current) return;
-        setResult(data);
+
         setCatalogCount(all.length);
+
+        const q = searchValue.trim().toLowerCase();
+        const filtered = q
+          ? all.filter(
+              (item) =>
+                item.name.toLowerCase().includes(q) ||
+                item.sections.some(
+                  (s) =>
+                    s.name.toLowerCase().includes(q) ||
+                    s.teacher.toLowerCase().includes(q)
+                )
+            )
+          : all;
+
+        const totalSections = filtered.reduce(
+          (sum, item) => sum + item.sections.length,
+          0
+        );
+        setResult({ items: filtered, total: filtered.length, totalSections });
       } catch {
         if (id !== requestId.current) return;
         showFeedback("error", "Could not load classes. Please try again.");
@@ -123,9 +138,11 @@ export function useClasses() {
         await deleteClass(item.id);
         await load(searchRef.current);
         showFeedback("success", `${item.name} was removed.`);
-      } catch {
-        showFeedback("error", "Failed to delete class.");
-        throw new Error("delete_failed");
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to delete class.";
+        showFeedback("error", message);
+        throw error;
       } finally {
         setIsMutating(false);
       }
