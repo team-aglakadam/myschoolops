@@ -1,18 +1,70 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
-  IStudentFilters,
-  STUDENT_CLASS_OPTIONS,
-  STUDENT_SECTION_OPTIONS,
+  type IStudentFilters,
   STUDENT_STATUS_OPTIONS,
   type StudentStatusFilter,
 } from "@/types/IStudentTypes";
 import { cn } from "@/lib/utils";
+
+interface ClassOption {
+  name: string;
+  sections: string[];
+}
+
+function useFilterOptions() {
+  const [classes, setClasses] = useState<ClassOption[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const res = await fetch("/api/classes");
+        if (!res.ok) return;
+        const json = await res.json();
+        const rows = json.data as Array<{
+          name: string;
+          section: string | null;
+        }>;
+
+        const map = new Map<string, Set<string>>();
+        for (const row of rows) {
+          if (!map.has(row.name)) map.set(row.name, new Set());
+          if (row.section) map.get(row.name)!.add(row.section);
+        }
+
+        if (!cancelled) {
+          setClasses(
+            Array.from(map.entries())
+              .map(([name, secs]) => ({
+                name,
+                sections: Array.from(secs).sort(),
+              }))
+              .sort((a, b) =>
+                a.name.localeCompare(b.name, undefined, { numeric: true })
+              )
+          );
+        }
+      } catch {
+        // Silently fail — filters just stay empty
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return classes;
+}
 
 interface StudentToolbarProps {
   search: string;
@@ -29,6 +81,8 @@ export function StudentToolbar({
   onFiltersChange,
   className,
 }: StudentToolbarProps) {
+  const classes = useFilterOptions();
+
   const hasActiveFilters =
     Boolean(search.trim()) ||
     Boolean(filters.className) ||
@@ -39,13 +93,26 @@ export function StudentToolbar({
     key: K,
     value: IStudentFilters[K]
   ) => {
-    onFiltersChange({ ...filters, [key]: value });
+    if (key === "className") {
+      // Reset section when class changes
+      onFiltersChange({ ...filters, className: value as string, section: "" });
+    } else {
+      onFiltersChange({ ...filters, [key]: value });
+    }
   };
 
   const clearAll = () => {
     onSearchChange("");
     onFiltersChange({ className: "", section: "", status: "" });
   };
+
+  // Get section options for the selected class filter
+  const selectedClass = classes.find((c) => c.name === filters.className);
+  const sectionOptions = selectedClass?.sections ?? [];
+  // If no specific class is selected, show all unique sections
+  const allSections = filters.className
+    ? sectionOptions
+    : Array.from(new Set(classes.flatMap((c) => c.sections))).sort();
 
   return (
     <div
@@ -74,7 +141,10 @@ export function StudentToolbar({
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:w-auto lg:min-w-[28rem]">
           <div className="space-y-1.5">
-            <Label htmlFor="filter-class" className="text-xs text-muted-foreground">
+            <Label
+              htmlFor="filter-class"
+              className="text-xs text-muted-foreground"
+            >
               Class
             </Label>
             <Select
@@ -84,9 +154,9 @@ export function StudentToolbar({
               aria-label="Filter by class"
             >
               <option value="">All classes</option>
-              {STUDENT_CLASS_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              {classes.map((cls) => (
+                <option key={cls.name} value={cls.name}>
+                  {cls.name}
                 </option>
               ))}
             </Select>
@@ -106,9 +176,9 @@ export function StudentToolbar({
               aria-label="Filter by section"
             >
               <option value="">All sections</option>
-              {STUDENT_SECTION_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              {allSections.map((sec) => (
+                <option key={sec} value={sec}>
+                  {sec}
                 </option>
               ))}
             </Select>
